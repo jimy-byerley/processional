@@ -10,36 +10,12 @@
 	
 	Some features of this module are also accessible from commandline
 	
-		$ python -m processional.slave localhost:8000 main/pick_applenator_ultraparallel.py
+		$ python -m processional localhost:8000 main/pick_applenator_ultraparallel.py
 
 '''
 
-from time import time, sleep
-from types import CodeType, FunctionType
-from multiprocessing import Process, Pipe
-from threading import Lock, Condition, current_thread
-import threading
-import socket
-
-
-from weakref import WeakValueDictionary
-from collections import deque
-from pnprint import nprint
-import dill
-
-import warnings
-import traceback
-import os
-import sys
-import ctypes
-import select
-import struct
-import pickle
-
-
-
 __all__ = [
-	'Thread', 'spawn', 'thread',
+	'Thread', 'thread',
 	'SlaveThread', 
 	'SlaveProcess', 'RemoteObject', 'LocalObject', 'slave', 'server', 'client', 'localserver', 'localwrap', 
 	'SharedMemory', 'sharedmemory',

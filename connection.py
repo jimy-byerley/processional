@@ -1,4 +1,6 @@
-import struct, socket
+import struct, socket, pickle
+from io import BytesIO as StringIO
+
 from .shared import Pickler
 
 
@@ -97,7 +99,6 @@ class SocketConnection(object):
 			file = StringIO()
 			Pickler(file).dump(data)
 			data = file.getvalue()
-			#data = pickle.dumps(data)
 		except Exception as err:
 			raise SerializationError('while sending,', err)
 		
@@ -107,15 +108,9 @@ class SocketConnection(object):
 			self.socket.sendall(self.header.pack(len(data)))
 		# blocking send until everything is guaranteed sent
 		self.socket.sendall(data)
-		# hand-made equivalent to socket.sendall
-		#data = memoryview(data)
-		#sent = 0
-		#while sent < len(data):
-			#sent += self.socket.send(data[sent:])
-		#print('transmission ok')
 	
 def guess_socket_familly(address):
-	if isinstance(address, bytes):
+	if isinstance(address, (bytes, str)):
 		return socket.AF_UNIX
 	elif isinstance(address, tuple):
 		return socket.AF_INET

@@ -1,4 +1,5 @@
-import threading
+import threading, ctypes
+from collections import deque
 
 
 __all__ = ['thread', 'Thread', 'SlaveThread']
@@ -219,7 +220,7 @@ class SlaveThread:
 	
 	def invoke(self, func):
 		''' schedule a task then immediately wait for its result '''
-		if current_thread() == self.thread:
+		if threading.current_thread() == self.thread:
 			return func()
 		elif not self.running:
 			raise KeyboardInterrupt('slave exited')

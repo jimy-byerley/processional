@@ -1,11 +1,14 @@
-from . import slave
+from . import host
 from .connection import SocketConnection, guess_socket_familly
+from .shared import Diller, Pickler
 
 import sys
 import os, socket
-from time import sleep
+from math import inf
+from time import sleep, time
 from weakref import WeakValueDictionary
 from threading import Lock, Condition
+from io import BytesIO as StringIO
 
 
 __all__ = ['slave', 'server', 'client', 'localserver', 'localwrap', 
@@ -53,13 +56,16 @@ def server(address, persistent=False, detach=False, connect=True) -> 'SlaveProce
 			
 			connect:  if `True`, wait for the server process to start and return a `SlaveProcess` instance connected to it
 	'''
-	guess_socket_familly(address)
-	
-	args = ['python', '-m', 'processional.slave', address]
+	args = ['python', '-m', 'processional', address]
 	file = getattr(sys.modules['__main__'], '__file__', None)
 	if file:	   args.append(file)
 	if detach:	   args.append('-d')
 	if persistent: args.append('-p')
+	
+	if guess_socket_familly(address) == socket.AF_UNIX:
+		try:	os.unlink(address)
+		except FileNotFoundError: pass
+	
 	pid = os.spawnv(os.P_NOWAIT, sys.executable, args)
 	
 	if connect:
@@ -183,33 +189,33 @@ class SlaveProcess:
 		
 	def close(self) -> 'ProcessTask':
 		''' stop the child process. any command sent after this will be ignored '''
-		return ProcessTask(self, slave.CLOSE, None)
+		return ProcessTask(self, host.CLOSE, None)
 	
 	def detach(self) -> 'ProcessTask':
 		''' set the child process to not exit when the master/last client disconnects '''
-		return ProcessTask(self, slave.DETACH, None)
+		return ProcessTask(self, host.DETACH, None)
 		
 	def persist(self) -> 'ProcessTask':
 		''' set the server process to not stop waiting new connections when the last client disconnects '''
-		return ProcessTask(self, slave.PERSIST, None)
+		return ProcessTask(self, host.PERSIST, None)
 	
 	def schedule(self, code) -> 'ProcessTask':
 		''' schedule a blocking task for the child process, 
 		    return a Thread proxy object that allows to wait for the call termination and to retreive the result.
 		'''
-		return ProcessTask(self, slave.BLOCK, code)
+		return ProcessTask(self, host.BLOCK, code)
 		
 	def invoke(self, code):
 		''' schedule a blocking task for the child process, and wait for its result.
 			The result is retreived and returned.
 		'''
-		return ProcessTask(self, slave.BLOCK, code).wait()
+		return ProcessTask(self, host.BLOCK, code).wait()
 		
 	def thread(self, code) -> 'ProcessTask':
 		''' schedule a threaded task on the child process and return a Thread proxy object to wait for the result.
 			the call is executed in a thread on the child process, so other calls can be started before that one's termination.
 		'''
-		return ProcessTask(self, slave.THREAD, code)
+		return ProcessTask(self, host.THREAD, code)
 	
 	def wrap(self, code) -> 'RemoteObject':
 		''' return a proxy on an object living in the child process 
@@ -221,8 +227,8 @@ class SlaveProcess:
 				`release()` method when the object is no more necessary so the slave can garbage
 				collect it if no longer referenced on the slave side
 		'''
-		remote = ProcessTask(self, slave.WRAP, code).wait()
-		return RemoteObject(WrappedObject(self, remote, True), ((slave.ITEM, remote),))
+		remote = ProcessTask(self, host.WRAP, code).wait()
+		return RemoteObject(WrappedObject(self, remote, True), ((host.ITEM, remote),))
 	
 	def poll(self, timeout=0):
 		''' wait for reception of any result, return True if some are ready for reception 
@@ -265,12 +271,13 @@ class ProcessTask(object):
 		if self.id not in self.slave.register:
 			self.slave.register[self.id] = None
 			
-			if callable(code):
-				file = StringIO()
-				Diller(file).dump(code)
-				code = file.getvalue()
-			elif code and not isinstance(code, tuple):
-				raise TypeError('code must be callable')
+			if op in (host.BLOCK, host.WRAP, host.THREAD):
+				if callable(code):
+					file = StringIO()
+					Diller(file).dump(code)
+					code = file.getvalue()
+				elif code and not isinstance(code, tuple):
+					raise TypeError('code must be callable')
 			
 			self.slave._unpoll()
 			
@@ -315,7 +322,8 @@ class ProcessTask(object):
 		''' wait for the task termination and check for exceptions '''
 		if not self.slave.register[self.id]:
 			delay = timeout
-			end = time() + (timeout or inf)
+			if timeout is not None:
+				end = time()+timeout
 			while True:
 				# receive
 				if self.slave.recvlock.acquire(False):
@@ -328,8 +336,9 @@ class ProcessTask(object):
 				if self.slave.register[self.id]:
 					break
 					
-				delay = end-time()
-				if delay <= 0:
+				if timeout is None:		delay = None
+				else:					delay = end-time()
+				if timeout is not None and delay <= 0:
 					raise TimeoutError('nothing received within allowed time')
 		err, result, report = self.slave.register[self.id]
 		self.slave.register[self.id] = None
@@ -351,11 +360,11 @@ class WrappedObject(object):
 		self.owned = owned
 	
 	def __del__(self):
-		ProcessTask(self.slave, slave.DROP, self.id)
+		ProcessTask(self.slave, host.DROP, self.id)
 		
 	def own(self):
 		if not self.owned:
-			ProcessTask(self.slave, slave.OWN, self.id)
+			ProcessTask(self.slave, host.OWN, self.id)
 			self.owned = True
 	
 class RemoteObject(object):
@@ -399,7 +408,7 @@ class RemoteObject(object):
 	
 	@classmethod
 	def _restore(self, sid, address):
-		if sid == slave.sid:
+		if sid == host.sid:
 			return slave.unwrap(address)
 		slave = SlaveProcess.instances.get(sid)
 		if slave:
@@ -407,7 +416,7 @@ class RemoteObject(object):
 		raise ValueError('cannot represent {} from {} in {} out of its owning process and in unconnected process'.format(
 					_format_address(address),
 					sid,
-					slave.sid,
+					host.sid,
 					))
 					
 	@property
@@ -416,10 +425,10 @@ class RemoteObject(object):
 		
 	def __getitem__(self, key):
 		''' create a speculative reference on an item of this object '''
-		return RemoteObject(self.slave, (*self.address, (slave.ITEM, key)))
+		return RemoteObject(self.slave, (*self._address, (host.ITEM, key)))
 	def __getattr__(self, key):
 		''' create a speculative reference on an attribute of this object '''
-		return RemoteObject(self.slave, (*self.address, (slave.ATTR, key)))
+		return RemoteObject(self.slave, (*self._address, (host.ATTR, key)))
 	def __setitem__(self, key, value):
 		''' send a value to be assigned to the referenced object item '''
 		self.slave.schedule((setitem, self, key, value))
@@ -441,7 +450,7 @@ class RemoteObject(object):
 	
 	def __call__(self, *args, **kwargs):
 		''' invoke the referenced object '''
-		return self.slave.invoke((slave.call, self.address, args, kwargs))
+		return self.slave.invoke((host.call, self._address, args, kwargs))
 		
 	def own(self):
 		''' ensure this process own a reference to the remote object '''
@@ -449,7 +458,7 @@ class RemoteObject(object):
 	
 	def unwrap(self):
 		''' retreive the referenced object in the current process. It must be pickleable '''
-		return ProcessTask(self.slave, slave.BLOCK, (slave.unwrap, address))
+		return self.slave.invoke((host.unwrap, self._address))
 
 			
 
@@ -574,7 +583,7 @@ def test_serverprocess():
 	import multiprocessing.managers
 	
 	# main thread invocations and cell variables
-	process = server(b'/tmp/truc')
+	process = server('/tmp/truc')
 	process.invoke(lambda: print('ok'))
 	
 	# sending many small commands
@@ -605,7 +614,7 @@ def test_serverprocess():
 	foreigner = process.wrap(lambda: [0, 0])
 	
 	import processional
-	print('main', processional.slave.sid)
+	print('main', processional.host.sid)
 	print('process', process.sid)
 	print('second', second.sid)
 	

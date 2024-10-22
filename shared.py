@@ -2,8 +2,8 @@
 import mmap
 import copyreg
 import pickle
-from io import BytesIO as StringIO
 from weakref import WeakValueDictionary
+from io import BytesIO as StringIO
 
 import numpy.core as np
 import dill
