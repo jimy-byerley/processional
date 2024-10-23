@@ -16,33 +16,36 @@ __all__ = ['slave', 'server', 'client', 'localserver', 'localwrap',
 
 
 
-def slave(func=None, priority=0) -> 'SlaveProcess':
+def slave(address=None, module=None, detach=False) -> 'SlaveProcess':
 	''' create a slave process connected to the current process with a `Pipe`
 		`func` is a function run before the commands reception loop
 	'''
-	if func and not callable(func):
-		raise TypeError('function must be callable')
+	args = [sys.executable, '-m', 'processional', '-s']
+	if address:    args.append(address)
+	if module:
+		if isinstance(module, str):	 file = module
+		else:                        file = module.__file__
+		if file:   args.append(file)
+	if detach:     args.append('-d')
 	
-	connection, endpoint = Pipe()		# communication pipe between processes
-	process = Process(
-				target=slave_main, 
-				args=(endpoint, dill.dumps(func)),
-				)
-	process.start()
-	slave = SlaveProcess(connection)
-	slave.process = process
+	pid = os.spawnv(os.P_NOWAIT, sys.executable, args)
+	
+	slave = client(address or _default_address(pid))
+	slave.pid = pid
 	return slave
 	
-def server(address, persistent=False, detach=False, connect=True) -> 'SlaveProcess':
+def server(address=None, module=None, persistent=False, detach=False, connect=True) -> 'SlaveProcess':
 	''' create a server process that listen for any new connection and answer to any client command.
 		The clients connect to that process using a socket (unix or inet socket)
 		
 		Example:
 		
-			>>> first = server(b'/tmp/server')
-			>>> second = client(b'/tmp/server')
-			>>> o = first.wrap(lambda: 'some')
-			>>> second.invoke(lambda: print(o))
+			>>> client1 = server('/tmp/server')
+			>>> o = client1.wrap(lambda: 'some')
+			
+			>>> client2 = client('/tmp/server')
+			>>> client2.invoke(lambda: print(o))
+			some
 		
 		Args:
 		
@@ -56,10 +59,13 @@ def server(address, persistent=False, detach=False, connect=True) -> 'SlaveProce
 			
 			connect:  if `True`, wait for the server process to start and return a `SlaveProcess` instance connected to it
 	'''
-	args = ['python', '-m', 'processional', address]
-	file = getattr(sys.modules['__main__'], '__file__', None)
-	if file:	   args.append(file)
-	if detach:	   args.append('-d')
+	args = [sys.executable, '-m', 'processional']
+	if address:    args.append(address)
+	if module:
+		if isinstance(module, str):	 file = module
+		else:                        file = module.__file__
+		if file:   args.append(file)
+	if detach:     args.append('-d')
 	if persistent: args.append('-p')
 	
 	if guess_socket_familly(address) == socket.AF_UNIX:
@@ -69,7 +75,7 @@ def server(address, persistent=False, detach=False, connect=True) -> 'SlaveProce
 	pid = os.spawnv(os.P_NOWAIT, sys.executable, args)
 	
 	if connect:
-		slave = client(address)
+		slave = client(address or _default_address(pid))
 		slave.pid = pid
 		return slave
 		
@@ -126,8 +132,6 @@ def localwrap(value) -> 'LocalObject':
 	'''
 	slave_env[id(value)] = value
 	return LocalObject((('item', id(value)),))
-
-
 
 
 class SlaveProcess:
@@ -479,6 +483,8 @@ def _format_address(address):
 			address += '>'
 	return address
 
+def _default_address(pid):
+	return '/tmp/process-{}'.format(pid)
 
 
 

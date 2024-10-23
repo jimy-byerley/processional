@@ -35,7 +35,7 @@ class Server:
 	
 		multiple can be run in a single process, but most of the time there is only one created at the process start 
 	'''
-	def __init__(self, address, init: callable=None, persistent=False, attached=False):
+	def __init__(self, address, module=None, persistent=False, attached=False):
 		''' open and initialize the server '''
 		self.address = address
 		self.server = None
@@ -59,12 +59,8 @@ class Server:
 		self.server.listen()
 		self.sockets.append(self.server)
 		
-		if init is not None:
-			init = dill.loads(init)
-			if init is not None:
-				init()
-				if hasattr(init, '__globals__'):
-					self.env = init.__globals__
+		if module:
+			self.env = module.__dict__
 	
 	def __del__(self):
 		if self.server:
@@ -86,6 +82,27 @@ class Server:
 					self.sockets.append(sock)
 					self.clients[id(sock)] = Client(connection, Counter())
 			
+			# check receved commands, ready is not used because new commands can arrive during this loop
+			self.step()
+			
+			if not self.clients:
+				# no one needs the server anymore
+				if self.attached:
+					sys.exit(1)
+				if not self.persistent:
+					return True
+	
+	def loop(self):
+		''' server process main function '''
+		sock, source = self.server.accept()
+		self.sockets.append(sock)
+		self.clients[id(sock)] = Client(connection, Counter())
+		
+		if self.server.family == socket.AF_UNIX:
+			try:	os.unlink(self.address)
+			except FileNotFoundError: pass
+		
+		while True:
 			# check receved commands, ready is not used because new commands can arrive during this loop
 			self.step()
 			
