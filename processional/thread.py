@@ -1,4 +1,5 @@
 import threading, ctypes
+from threading import Lock, Condition
 from collections import deque
 
 

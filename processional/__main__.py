@@ -2,9 +2,9 @@
 	entry point to run a slave from `eve.process` from commandline
 '''
 
-from .host import Server
+from .host import Host
 from .process import _default_address
-import sys, os
+import sys, os, types, importlib
 
 raw_address = None
 raw_module = None
@@ -51,13 +51,8 @@ except PermissionError:
     warnings.warn("unable to set process signal group, the slave will receive same signals as its parent")
 
 if not raw_module:
-    import types
     module = types.ModuleType('__mp_main__')
-elif raw_module.isidentifier():
-    import importlib
-    module = importlib.import_module(raw_module)
-elif os.path.exists(raw_module):
-    import types
+elif raw_module.endswith('.py'):
     sys.path.append(os.path.dirname(raw_module))
     module = types.ModuleType('__mp_main__')
     module.__file__ = raw_module
@@ -65,12 +60,11 @@ elif os.path.exists(raw_module):
     sys.modules['__main__'] = module
     exec(open(raw_module, 'r').read(), module.__dict__)
 else:
-    raise IOError('unable to find {}'.format(repr(raw_module)))
+    module = importlib.import_module(raw_module)
 
 if not raw_address:
     address = _default_address(os.getpid())
-
-if ':' in raw_address:
+elif ':' in raw_address:
     ip, port = raw_address.split(':')
     port = int(port)
     address = (ip, port)
@@ -79,4 +73,7 @@ else:
 
 sys.modules[module.__name__] = module
 sys.modules['__main__'] = module
-Server(address, module, persistent=persistent, attached=not detach).loop()
+
+host = Host(address, module, persistent=persistent, attached=not detach)
+if single:  host.slave()
+else:       host.server()

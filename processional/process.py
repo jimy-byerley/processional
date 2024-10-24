@@ -4,6 +4,7 @@ from .shared import Diller, Pickler
 
 import sys
 import os, socket
+from operator import setitem, getitem
 from math import inf
 from time import sleep, time
 from weakref import WeakValueDictionary
@@ -21,11 +22,11 @@ def slave(address=None, module=None, detach=False) -> 'SlaveProcess':
 		`func` is a function run before the commands reception loop
 	'''
 	args = [sys.executable, '-m', 'processional', '-s']
-	if address:    args.append(address)
+	if address:    args.extend(['-a', address])
 	if module:
 		if isinstance(module, str):	 file = module
 		else:                        file = module.__file__
-		if file:   args.append(file)
+		if file:   args.extend(['-m', file])
 	if detach:     args.append('-d')
 	
 	pid = os.spawnv(os.P_NOWAIT, sys.executable, args)
@@ -60,11 +61,11 @@ def server(address=None, module=None, persistent=False, detach=False, connect=Tr
 			connect:  if `True`, wait for the server process to start and return a `SlaveProcess` instance connected to it
 	'''
 	args = [sys.executable, '-m', 'processional']
-	if address:    args.append(address)
+	if address:    args.extend(['-a', address])
 	if module:
 		if isinstance(module, str):	 file = module
 		else:                        file = module.__file__
-		if file:   args.append(file)
+		if file:   args.extend(['-m', file])
 	if detach:     args.append('-d')
 	if persistent: args.append('-p')
 	
@@ -364,7 +365,8 @@ class WrappedObject(object):
 		self.owned = owned
 	
 	def __del__(self):
-		ProcessTask(self.slave, host.DROP, self.id)
+		if self.owned:
+			ProcessTask(self.slave, host.DROP, self.id)
 		
 	def own(self):
 		if not self.owned:
@@ -413,7 +415,7 @@ class RemoteObject(object):
 	@classmethod
 	def _restore(self, sid, address):
 		if sid == host.sid:
-			return slave.unwrap(address)
+			return host.unwrap(address)
 		slave = SlaveProcess.instances.get(sid)
 		if slave:
 			return self(WrappedObject(slave, address[0][1], False), address)
@@ -423,16 +425,19 @@ class RemoteObject(object):
 					host.sid,
 					))
 					
-	@property
-	def slave(self):
-		return self._ref.slave
+	# @property
+	# def slave(self):
+		# return self._ref.slave
 		
 	def __getitem__(self, key):
 		''' create a speculative reference on an item of this object '''
-		return RemoteObject(self.slave, (*self._address, (host.ITEM, key)))
+		return RemoteObject(self._ref, (*self._address, (host.ITEM, key)))
 	def __getattr__(self, key):
 		''' create a speculative reference on an attribute of this object '''
-		return RemoteObject(self.slave, (*self._address, (host.ATTR, key)))
+		if key == 'slave':
+			return self._ref.slave
+		else:
+			return RemoteObject(self._ref, (*self._address, (host.ATTR, key)))
 	def __setitem__(self, key, value):
 		''' send a value to be assigned to the referenced object item '''
 		self.slave.schedule((setitem, self, key, value))
@@ -499,11 +504,8 @@ def test_slaveprocess():
 	# import a big ressource
 	import numpy as np
 	
-	import multiprocessing
-	multiprocessing.set_start_method('spawn')
-	
 	# main thread invocations and cell variables
-	process = slave(lambda: print('init'))
+	process = slave()
 	process.invoke(lambda: print('ok'))
 	cell = 'coucou'
 	process.invoke(lambda: print('value:', cell))
@@ -545,11 +547,9 @@ def test_slaveprocess():
 	print('\nall done')
 	
 def test_remoteobject():
-	import multiprocessing
-	multiprocessing.set_start_method('spawn')
-	
-	@slave
-	def process():
+	process = slave()
+	@process.invoke
+	def setup():
 		global a, b, c
 		a = 'coucou'
 		b = [1,2,3]
@@ -625,9 +625,12 @@ def test_serverprocess():
 	print('second', second.sid)
 	
 	co = second.wrap(lambda a=process.address: client(a))
+	print(1)
 	@second.invoke
 	def job():  foreigner[0] = 1
+	print(2)
 	assert foreigner[0].unwrap() == 1
+	print(3)
 	second.close()
 	
 	process.close()

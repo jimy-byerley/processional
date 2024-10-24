@@ -1,7 +1,5 @@
 
-import mmap
-import copyreg
-import pickle
+import mmap, copyreg, pickle
 from weakref import WeakValueDictionary
 from io import BytesIO as StringIO
 
@@ -9,7 +7,6 @@ import numpy.core as np
 import dill
 
 
-__all__ = ['SharedMemory', 'sharedmemory']
 __all__ = ['SharedMemory', 'sharedmemory']
 
 shared_memories = WeakValueDictionary()

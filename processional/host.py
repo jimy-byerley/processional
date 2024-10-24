@@ -1,7 +1,7 @@
 from .connection import SocketConnection, guess_socket_familly
+from .thread import thread
 
-import sys
-import traceback, warnings
+import sys, traceback, warnings
 import os, socket, select, signal
 from dataclasses import dataclass
 from collections import Counter
@@ -26,11 +26,11 @@ DETACH = 7
 ITEM = 0
 ATTR = 1
 
-# dictionnary of wrapped objects in this process, available for all instances of Server
+# dictionnary of wrapped objects in this process, available for all instances of Host
 wrapped = {}
 
 
-class Server:
+class Host:
 	''' server process implementation
 	
 		multiple can be run in a single process, but most of the time there is only one created at the process start 
@@ -38,7 +38,7 @@ class Server:
 	def __init__(self, address, module=None, persistent=False, attached=False):
 		''' open and initialize the server '''
 		self.address = address
-		self.server = None
+		self.socket = None
 		# allows the server to continue running after the last client disconnected
 		self.persistent = persistent
 		# stops the current process after the last client disconnected
@@ -54,73 +54,79 @@ class Server:
 			self.address = self.address.encode('utf-8')
 		
 		# open the server socket
-		self.server = socket.socket(guess_socket_familly(self.address), socket.SOCK_STREAM)
-		self.server.bind(self.address)
-		self.server.listen()
-		self.sockets.append(self.server)
+		self.socket = socket.socket(guess_socket_familly(self.address), socket.SOCK_STREAM)
+		self.socket.bind(self.address)
+		self.socket.listen()
 		
 		if module:
 			self.env = module.__dict__
 	
 	def __del__(self):
-		if self.server:
-			self.server.close()
-			if self.server.family == socket.AF_UNIX:
-				try:	os.unlink(self.address)
-				except FileNotFoundError: pass
+		if self.socket:
+			self.socket.close()
+			self._unlink()
 	
-	def loop(self):
-		''' server process main function '''
+	def server(self):
+		''' server process listening loop '''
+		# welcome requests of new connections
+		self.sockets.append(self.socket)
 		while True:
+			# wait for an incomming request
 			ready, _, _ = select.select(self.sockets, [], [])
 			# welcome new connections
 			for sock in ready:
-				if sock is self.server:
-					sock, source = self.server.accept()
-					connection = SocketConnection(sock)
-					connection.send(sid)
-					self.sockets.append(sock)
-					self.clients[id(sock)] = Client(connection, Counter())
-			
+				if sock is self.socket:
+					self._accept()
 			# check receved commands, ready is not used because new commands can arrive during this loop
-			self.step()
+			self._step()
 			
 			if not self.clients:
 				# no one needs the server anymore
 				if self.attached:
-					sys.exit(1)
+					sys.exit(0)
 				if not self.persistent:
-					return True
+					break
 	
-	def loop(self):
-		''' server process main function '''
-		sock, source = self.server.accept()
+	def slave(self):
+		''' slave process listening loop '''
+		# wait for the connection of the master
+		self._accept()
+		# delete socket entry as no longer needed
+		self._unlink()
+		
+		while True:
+			# wait for incomming commands
+			ready, _, _ = select.select(self.sockets, [], [])
+			# check receved commands, ready is not used because new commands can arrive during this loop
+			self._step()
+			
+			if not self.clients:
+				# the master does not need the slave anymore
+				if self.attached:
+					sys.exit(0)
+	
+	def _accept(self):
+		''' accept a client connection request '''
+		sock, source = self.socket.accept()
+		connection = SocketConnection(sock)
+		connection.send(sid)
 		self.sockets.append(sock)
 		self.clients[id(sock)] = Client(connection, Counter())
 		
-		if self.server.family == socket.AF_UNIX:
+	def _unlink(self):
+		''' delete the socket file if using UNIX socket '''
+		if self.socket.family == socket.AF_UNIX:
 			try:	os.unlink(self.address)
 			except FileNotFoundError: pass
-		
-		while True:
-			# check receved commands, ready is not used because new commands can arrive during this loop
-			self.step()
-			
-			if not self.clients:
-				# no one needs the server anymore
-				if self.attached:
-					sys.exit(1)
-				if not self.persistent:
-					return True
 					
-	def step(self):
+	def _step(self):
 		''' execute all already scheduled tasks
 			This is meant to be called periodically by the server event loop
 		'''
 		while True:
 			busy = False
 			for sock in self.sockets:
-				if sock is self.server:	continue
+				if sock is self.socket:	continue
 				client = self.clients[id(sock)]
 				
 				try:
