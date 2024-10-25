@@ -1,5 +1,5 @@
 from .connection import SocketConnection, guess_socket_familly
-from .thread import thread
+from .threading import thread
 
 import sys, traceback, warnings
 import os, socket, select, signal

@@ -7,22 +7,47 @@
 	- `SlaveProcess`  allows to trigger and wait executions on a remote dedicated process
 	- `SlaveThread`   allows to trigger and wait executions on an other thread, as `SlaveProcess` would
 	- `Thread`        thread wrapper that allows to wait and interrupt the thread jobs
+	- `RemoteObject`  convenient proxy over an object living in a slave process
 	
-	Some features of this module are also accessible from commandline
+	Commandline
+	-----------
 	
-		$ python -m processional localhost:8000 main/pick_applenator_ultraparallel.py
+	Server processes are also accessible from commandline
+	
+		$ python -m processional -a localhost:8000
+		
+	Commandline options are:
+	
+	```
+	python -m processional [-s][-p][-d] [-a ADDRESS] [-m MODULE]
 
+	-a   provide an ip address in format IP:PORT
+		or a path to the unix socket file to create
+		it must be specified unless -s is set
+	-m   provide the name of a python module to use as __main__ module, 
+		or a path to a python file to execute as __main__ when initializing the server
+		if ommited, an empty module is created
+				
+	-s    slave mode, just like a server with a single client
+	-p    set the server persistent, meaning it won't exit on last client disconnection
+	-d    set the server to detach from its parent thus to not exit on last client disconnection
+	```
+	
+	Module content
+	--------------
 '''
 
+__version__ = '0.1'
+__docformat__ = 'google'
 __all__ = [
 	'Thread', 'thread',
 	'SlaveThread', 
-	'SlaveProcess', 'RemoteObject', 'LocalObject', 'slave', 'server', 'client', 'localserver', 'localwrap', 
+	'SlaveProcess', 'RemoteObject', 'slave', 'server', 'client', 'localserver', 
+	# 'localwrap', 'LocalObject', 
 	'SharedMemory', 'sharedmemory',
 	]
 
-from .thread import *
-from .process import *
+from . import threading, processing, shared, host
+from .threading import *
+from .processing import *
 from .shared import *
-
-
