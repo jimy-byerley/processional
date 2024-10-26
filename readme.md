@@ -69,8 +69,12 @@ Basically this library is meant to be used when all processes remote or not are 
 | server process through unix sockets (faster)    | X                       |                            |
 | shared memory                                   | X                       |                            |
 
+## maturity
+
+This project in its published version has only been tested on small applications. However one of its previous and less complete version had been running programs with ~20 threads and ~10 processes exchanging very frequently all the time (big images, complex data structures, etc) on an industrial machine for over 2 years with no issue.
+
 ## thanks
 
 All this is made possible by 
 - the python interpreter's unique level of dynamicity
-- [dill](https://github.com/uqfoundation/dill) which extends [pickle](https://docs.python.org/3/library/pickle.html) to serialize functions as long as they are deserialized in the same python interpreter version and environment. After all functions in interpreted languages is just data
+- [dill](https://github.com/uqfoundation/dill) which extends [pickle](https://docs.python.org/3/library/pickle.html) to serialize functions as long as they are deserialized in the same python interpreter version and environment. After all in interpreted languages, functions are just data

@@ -45,6 +45,8 @@ Create a server processing
 -s    slave mode, just like a server with a single client
 -p    set the server persistent, meaning it won't exit on last client disconnection
 -d    set the server to detach from its parent thus to not exit on last client disconnection
+
+-h    show this help
 ''')
 	sys.exit(1)
 

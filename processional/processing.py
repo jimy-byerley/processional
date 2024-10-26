@@ -24,22 +24,27 @@ signal.signal(signal.SIGCHLD, lambda sig, stack: os.wait())
 
 def slave(address=None, main=None, detach=False) -> 'SlaveProcess':
 	''' create a slave process connected to the current process with a `Pipe`
+	
+		Example:
+			
+			>>> process = slave()
+			>>> process.invoke(lambda: print('hello from slave'))
 		
 		Arguments:
 			
 			address:	
-			
 				the address to use to communicate with the slave, if ommited an address is automatically picked
 				- it can be a network address as a tuple `(ip:str, port:int)` with `ip` being an address to the local computer on the target network
 				- on linux it can be the file name of a Unix socket to create
 			
 			main:  
 				the name of a python module to use as __main__ module, or a path to a python file to execute as __main__ when initializing the server.
+				
 				if ommited, an empty module is created
 				
 			detach:     
-			
 				if true, the slave will be considered detached an will survive the disconnection of the current process
+				
 				it is equivalent to calling `SlaveProcess.detach()` later
 	'''
 	args = [sys.executable, '-m', 'processional', '-s']
@@ -61,34 +66,30 @@ def server(address=None, main=None, persistent: callable=False, detach=False, co
 		
 		Example:
 		
-			>>> client1 =: callable server('/tmp/server')
-			>>> o = client1.wrap(lambda: 'hello message')
+			>>> process = server('/tmp/server')
+			>>> process.invoke(lambda: print('hello from server'))
 			
-			>>> client2 = client('/tmp/server')
-			>>> client2.invoke(lambda: print(o)): callable
-			hello message
-		
 		Args:
 		
-			address:  
-				: callable
+			address:
 				the server address
 				- it can be a network address as a tuple `(ip:str, port:int)` with `ip` being an address to the local computer on the target network
 				- on linux it can be the file name of a Unix socket to create
 			
-			main:  
+			main:
 				the name of a python module to use as __main__ module, or a path to a python file to execute as __main__ when initializing the server.
 				if ommited, an empty module is created
 				
-			detach:     
+			detach:
 				if true, the slave will be considered detached an will survive the disconnection of the current process
 				it is equivalent to calling `SlaveProcess.detach()` later
 				
-			persistent:  
+			persistent:
 				if `True` the server stay active when no clients is connected. Else it automatically stops its main loop and finish its threads.
 				It is equivalent to calling `SlaveProcess.persist()` later
 			
-			connect:  if `True`, wait for the server process to start and return a `SlaveProcess` instance connected to it
+			connect:  
+				if `True`, wait for the server process to start and return a `SlaveProcess` instance connected to it
 			
 		Note:
 			a current limitation of this module is that subprocesses always become zombie at their exit because `os.wait` is never called since spawned subprocesses might continue to run
@@ -120,8 +121,8 @@ def client(address, timeout:float=None) -> 'SlaveProcess':
 		Example:
 		
 			>>> server('/tmp/server', connect=False)
-			>>> slave = client('/tmp/server')
-			>>> slave.invoke(lambda: print('hello from slave'))
+			>>> process = client('/tmp/server')
+			>>> process.invoke(lambda: print('hello from server'))
 	
 		Args:
 			address:  
@@ -176,19 +177,40 @@ class SlaveProcess:
 		
 		This class is thread-safe
 		
-		Args:
-			connection:  The connection object to the slave. Not for end user
-			register:  if True, this `SlaveProcess` instance will be registered as implicit bridge to the remote sid. Not for end user
+		Attributes:
+			sid:     the value of `processional.host.sid` in the remote process
+			address: the address used to connect to this slave, or `None`
+			pid:     the process pid (if this slave has been created as a subprocess, else `None`)
+			instances:  a dictionnary of all living instances of `SlaveProcess`
 	
 		Example:
 		
 			>>> process = slave()
 			
-			>>> cell = 'coucou'
-			>>> process.invoke(lambda: print('value:', cell))  # the closure is serialized with its variables and passed to the remote process
+			Functions, closures and their cell variables are serialized and passed to the remote process, the result or error is retreived
 			
-			>>> task = process.schedule(lambda: print('value:', cell))  # this variant split the closure send from the task awaiting
+			>>> cell = 'coucou'
+			>>> process.invoke(lambda: print('value:', cell))  # cell variable
+			>>> process.invoke(lambda cell=cell: print('value:', cell))  # binding through default argument
+			>>> process.invoke(partial(print, 'value:', cell))  # binding
+			
+			>>> task = process.schedule(lambda: print('value:', cell))  # does not block
 			>>> task.wait()
+			
+			Exceptions are propagated, but traceback is not passed between processes
+			
+			>>> thread = slave()
+			>>> @thread.schedule
+			... def root():
+			... 	from math import sqrt
+			... 	return sqrt(-1)
+			>>> root.wait()
+			Traceback (most recent call last):
+			File "/tmp/test.py", line 9, in <module>
+				root.wait()
+			File "/home/jimy/maf/processional/processional/processing.py", line 428, in wait
+				raise err
+			ValueError: math domain error
 			
 		Note:
 		
@@ -320,7 +342,7 @@ class SlaveProcess:
 	def poll(self, timeout:float=0):
 		''' wait for reception of any result, return True if some are ready for reception 
 			
-			If `timeout` is non-null or None, poll will wait for reception
+			If `timeout` is non-null, this function will wait only for the given time in seconds. If it is `None` it will wait indefinitely
 		'''
 		if timeout is None or self.connection.poll(timeout):
 			id, err, result, report = self.connection.recv()

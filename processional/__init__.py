@@ -9,6 +9,15 @@
 	- `Thread`        thread wrapper that allows to wait and interrupt the thread jobs
 	- `RemoteObject`  convenient proxy over an object living in a slave process
 	
+	Main functions
+	--------------
+	
+	- `thread` runs simple threads
+	- `slave` creates a slave process
+	- `server` creates a server process
+	- `localserver` creates a thread serving other processes in the current process
+	- `sharedmemory` creates a buffer object that can be shared accoss processes, that can be viewed using `numpy` or `torch` array
+	
 	Commandline
 	-----------
 	
@@ -31,6 +40,8 @@
 	-s    slave mode, just like a server with a single client
 	-p    set the server persistent, meaning it won't exit on last client disconnection
 	-d    set the server to detach from its parent thus to not exit on last client disconnection
+
+	-h    show this help
 	```
 	
 	Module content
@@ -40,11 +51,12 @@
 __version__ = '0.1'
 __docformat__ = 'google'
 __all__ = [
-	'Thread', 'thread',
-	'SlaveThread', 
-	'SlaveProcess', 'RemoteObject', 'slave', 'server', 'client', 'localserver', 
+	'thread', 'current_thread',
+	'Thread', 'SlaveThread', 
+	'slave', 'server', 'client', 'localserver', 
+	'SlaveProcess', 'RemoteObject',
 	# 'localwrap', 'LocalObject', 
-	'SharedMemory', 'sharedmemory',
+	'sharedmemory', 'SharedMemory', 
 	]
 
 from . import threading, processing, shared, host

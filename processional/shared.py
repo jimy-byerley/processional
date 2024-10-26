@@ -1,9 +1,7 @@
-
 import mmap, copyreg, pickle
 from weakref import WeakValueDictionary
 from io import BytesIO as StringIO
 
-import numpy.core as np
 import dill
 
 
@@ -145,15 +143,23 @@ class Pickler(pickle.Pickler):
 	''' overloaded pickle '''
 	dispatch_table = copyreg.dispatch_table.copy()
 	dispatch_table[SharedMemory] = dump_sharedmemory
-	dispatch_table[np.ndarray] = dump_shared_ndarray
-	dispatch_table[np.void] = dump_shared_void
+	try:
+		import numpy.core as np
+	except ImportError:	pass
+	else:
+		dispatch_table[np.ndarray] = dump_shared_ndarray
+		dispatch_table[np.void] = dump_shared_void
 	
 class Diller(dill.Pickler):
 	''' overloaded dill '''
 	dispatch_table = copyreg.dispatch_table.copy()
 	dispatch_table[SharedMemory] = dump_sharedmemory
-	dispatch_table[np.ndarray] = dump_shared_ndarray
-	dispatch_table[np.void] = dump_shared_void
+	try:
+		import numpy.core as np
+	except ImportError:	pass
+	else:
+		dispatch_table[np.ndarray] = dump_shared_ndarray
+		dispatch_table[np.void] = dump_shared_void
 
 
 

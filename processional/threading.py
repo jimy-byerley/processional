@@ -21,6 +21,45 @@ class Thread(threading.Thread):
 		It is often more convenient to instantiate it using `thread`
 	
 		This class is thread-safe
+		
+		Example:
+		
+			Spawn a thread in a functional or in a decorator style
+		
+			>>> def myfunc():
+			...     sleep(1)
+			...     return 'ok'
+			>>> mythread = thread(myfunc)
+		
+			>>> @thread
+			... def mythread():
+			...     sleep(1)
+			...     return 'ok'
+			
+			Wait its result
+			
+			>>> mythread.complete()
+			False
+			>>> result = mythread.wait()
+			>>> result
+			'ok'
+			
+			Errors are propagated
+			
+			>>> root = thread(lambda: sqrt(-1))
+			>>> root.wait()
+			Traceback (most recent call last):
+			File "/tmp/test.py", line 5, in <module>
+				root.wait()
+			File "/home/jimy/maf/processional/processional/threading.py", line 138, in wait
+				raise self.error
+			File "/home/jimy/maf/processional/processional/threading.py", line 105, in run
+				self.result = self.target()
+							^^^^^^^^^^^^^
+			File "/tmp/test.py", line 4, in <lambda>
+				root = thread(lambda: sqrt(-1))
+									^^^^^^^^
+			ValueError: math domain error
 	
 		Args:
 			target:      the callable the thread will execute
@@ -221,10 +260,29 @@ class SlaveThread:
 		
 			>>> thread = SlaveThread()
 			
-			>>> thread.invoke(lambda: print('hello'))  # the closure executed in the thread
+			Functions, closures are passed to the thread to be executed, the result or error is retreived
 			
-			>>> task = thread.schedule(lambda: print('hello'))  # this variant split the closure send from the task awaiting
+			>>> thread.invoke(lambda: print('hello'))  # the closure executed in the thread
+			>>> task = thread.schedule(lambda: print('hello'))  # does not block
 			>>> task.wait()
+			
+			Errors are propagated
+			
+			>>> root = thread.schedule(lambda: sqrt(-1))
+			>>> root.wait()
+			Traceback (most recent call last):
+			File "/tmp/test.py", line 6, in <module>
+				root.wait()
+			File "/home/jimy/maf/processional/processional/threading.py", line 415, in wait
+				raise err
+			File "/home/jimy/maf/processional/processional/threading.py", line 337, in step
+				result = task()
+						^^^^^^
+			File "/tmp/test.py", line 5, in <lambda>
+				root = thread.schedule(lambda: sqrt(-1))
+											^^^^^^^^
+			ValueError: math domain error
+			
 	'''
 	def __init__(self, existing=None):
 		self.id = 0		# max task id used
