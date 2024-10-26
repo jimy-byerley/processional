@@ -18,6 +18,9 @@ __all__ = ['slave', 'server', 'client', 'localserver',
 			'SlaveProcess', 'RemoteObject']
 
 
+# accept all child process exits
+signal.signal(signal.SIGCHLD, lambda sig, stack: os.wait())
+
 
 def slave(address=None, main=None, detach=False) -> 'SlaveProcess':
 	''' create a slave process connected to the current process with a `Pipe`
