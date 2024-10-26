@@ -9,6 +9,7 @@ def module_eval(module, expand_passed=False, expand_failed=True, dynamic=False, 
 	
 	for module, func in tests:
 		print('{}testing{} {}.{} ...  '.format(DETAIL, NORMAL, module, func), end='')
+		sys.stdout.flush()
 		
 		if isolate:     success, outs = func_eval_subprocess(module, func)
 		else:           success, outs = func_eval_local(module, func)
@@ -63,7 +64,7 @@ def func_eval_local(module, func):
 	finally:
 		sys.stdout = stdout
 		sys.stderr = stderr
-	return success, (open('/tmp/stdout', 'r').read(), open('/tmp/stderr', 'r').read())
+	return success, (open('/tmp/stdout', 'rb').read(), open('/tmp/stderr', 'rb').read())
 
 def print_outs(result):
 	stdout, stderr = result
@@ -78,10 +79,18 @@ SUCCESS = '\033[92m'
 DETAIL = '\033[90m'
 
 if __name__ == '__main__':
-	module_eval(
-		sys.argv[1], 
-		dynamic='-d' in sys.argv,
-		isolate='-i' in sys.argv,
-		expand_failed='-f' in sys.argv,
-		expand_passed='-p' in sys.argv,
-		)
+	module = sys.argv[1]
+	path = sys.argv[1].split('.')
+	if path[-1].startswith('test_'):
+		func = path.pop()
+		module = '.'.join(path)
+		success, outs = func_eval_local(module, func)
+		print_outs(outs)
+	else:
+		module_eval(
+			module, 
+			dynamic='-d' in sys.argv,
+			isolate='-i' in sys.argv,
+			expand_failed='-f' in sys.argv,
+			expand_passed='-p' in sys.argv,
+			)

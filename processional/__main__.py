@@ -4,7 +4,8 @@
 
 from .host import Host
 from .processing import _default_address
-import sys, os, types, importlib
+import sys, types, importlib
+import os, signal
 
 raw_address = None
 raw_module = None
@@ -51,6 +52,10 @@ Create a server processing
 try:	os.setsid()
 except PermissionError:	
 	warnings.warn("unable to set process signal group, the slave will receive same signals as its parent")
+
+# accept all child process exits
+signal.signal(signal.SIGCHLD, lambda sig, stack: os.wait())
+
 
 if not raw_module:
 	module = types.ModuleType('__mp_main__')

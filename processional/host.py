@@ -78,14 +78,13 @@ class Host:
 				if sock is self.socket:
 					self._accept()
 			# check receved commands, ready is not used because new commands can arrive during this loop
-			self._step()
+			if not self._step():
+				break
 			
-			if not self.clients:
-				# no one needs the server anymore
+			if not self.clients and not self.persistent:
 				if self.attached:
-					sys.exit(0)
-				if not self.persistent:
-					break
+					os.kill(os.getpid(), signal.SIGTERM)
+				break
 	
 	def slave(self):
 		''' slave process listening loop '''
@@ -98,12 +97,14 @@ class Host:
 			# wait for incomming commands
 			ready, _, _ = select.select(self.sockets, [], [])
 			# check receved commands, ready is not used because new commands can arrive during this loop
-			self._step()
+			if not self._step():
+				break
 			
 			if not self.clients:
 				# the master does not need the slave anymore
 				if self.attached:
-					sys.exit(0)
+					os.kill(os.getpid(), signal.SIGTERM)
+				break
 	
 	def _accept(self):
 		''' accept a client connection request '''
@@ -146,7 +147,7 @@ class Host:
 					# other end requested slave exit
 					try:	client.connection.send((tid, None, None))
 					except BrokenPipeError:	pass
-					return
+					return False
 				elif op == THREAD:
 					thread(lambda: self._task(client, tid, code, self._run))
 				elif op == BLOCK:
@@ -166,6 +167,7 @@ class Host:
 			
 			if not busy:
 				break
+		return True
 	
 	def _task(self, client, tid, code, run):
 		''' runs `run` and sends the result or error to the given client '''

@@ -28,33 +28,10 @@ class SocketConnection(object):
 		self.socket.settimeout(None)
 		
 	def __del__(self):
+		self.close()
+		
+	def close(self):
 		self.socket.close()
-		
-	def _recv_raw(self, blocking=True):
-		assert self.pending >= self.current
-		if self.current > len(self.tmp)//2:
-			self.tmp[:self.pending-self.current] = self.tmp[self.current:self.pending]
-			self.pending -= self.current
-			self.current = 0
-		
-		if self.pending >= len(self.tmp):
-			return
-		
-		try:
-			increment = self.socket.recv_into(self.tmp[self.pending:], flags=0 if blocking else socket.MSG_DONTWAIT)
-			self.pending += increment
-		except (BlockingIOError, socket.timeout):
-			return
-		
-		if blocking and increment <= 0:
-			raise EOFError('socket closed')
-		
-	def _read(self, nbytes, blocking=False):
-		if self.pending - self.current < nbytes:
-			raise ValueError('no enough data received')
-		current = self.current
-		self.current += nbytes
-		return self.tmp[current:self.current]
 		
 	def recv(self):
 		''' receive an object, blocking operation '''
@@ -108,6 +85,32 @@ class SocketConnection(object):
 			self.socket.sendall(self.header.pack(len(data)))
 		# blocking send until everything is guaranteed sent
 		self.socket.sendall(data)
+		
+	def _recv_raw(self, blocking=True):
+		assert self.pending >= self.current
+		if self.current > len(self.tmp)//2:
+			self.tmp[:self.pending-self.current] = self.tmp[self.current:self.pending]
+			self.pending -= self.current
+			self.current = 0
+		
+		if self.pending >= len(self.tmp):
+			return
+		
+		try:
+			increment = self.socket.recv_into(self.tmp[self.pending:], flags=0 if blocking else socket.MSG_DONTWAIT)
+			self.pending += increment
+		except (BlockingIOError, socket.timeout):
+			return
+		
+		if blocking and increment <= 0:
+			raise EOFError('socket closed')
+		
+	def _read(self, nbytes, blocking=False):
+		if self.pending - self.current < nbytes:
+			raise ValueError('no enough data received')
+		current = self.current
+		self.current += nbytes
+		return self.tmp[current:self.current]
 	
 def guess_socket_familly(address):
 	if isinstance(address, (bytes, str)):
@@ -115,5 +118,5 @@ def guess_socket_familly(address):
 	elif isinstance(address, tuple):
 		return socket.AF_INET
 	else:
-		raise TypeError("address must be a tuple (ip, port) for internet addresses, and bytes for unix addresses")
+		raise TypeError("address must be either a tuple (ip, port) for internet addresses, or string or bytes for unix addresses, not {}".format(type(address)))
 	
