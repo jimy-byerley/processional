@@ -13,8 +13,7 @@ from threading import Lock, Condition
 from io import BytesIO as StringIO
 
 
-__all__ = ['slave', 'server', 'client', 'localserver', 
-			# 'localwrap', 
+__all__ = ['slave', 'server', 'client', 'serve', 'export',
 			'SlaveProcess', 'RemoteObject']
 
 
@@ -60,7 +59,7 @@ def slave(address=None, main=None, detach=False) -> 'SlaveProcess':
 	slave.pid = pid
 	return slave
 	
-def server(address=None, main=None, persistent: callable=False, detach=False, connect=True) -> 'SlaveProcess':
+def server(address=None, main=None, persistent=False, detach=False, connect=True) -> 'SlaveProcess':
 	''' create a server process that listen for any new connection and answer to any client command.
 		The clients connect to that process using a socket (unix or inet socket)
 		
@@ -152,22 +151,37 @@ def client(address, timeout:float=None) -> 'SlaveProcess':
 	slave.address = address
 	return slave
 
-def localserver(address, persistent=False, connect=True) -> 'SlaveProcess':
+def serve(address=None, main=None, persistent=False, detach=False, connect=True) -> 'SlaveProcess':
 	''' like `server()` but the slave main loop is running in the current process in a dedicated thread. 
+		
 		this is useful to make the current thread a server and pass its address to an other process 
 	'''
-	thread = spawn(lambda: server_main(address, None, persistent))
+	if address and guess_socket_familly(address) == socket.AF_UNIX:
+		try:	os.unlink(address)
+		except FileNotFoundError: pass
+	
+	if not address:
+		address = _default_address(os.getpid())
+	
+	thread = thread(host.Host(address, main, persistent=persistent, attached=not detach).server)
 	if connect:
 		slave = client(address)
 		slave.thread = thread
+		slave.pid = os.getpid()
 		return slave
+	else:
+		return thread
 
-# def localwrap(value) -> 'LocalObject':
-# 	''' wrap an object in the local process.
-# 		this is perfectly useless, except for passing its reference to an other process
-# 	'''
-# 	slave_env[id(value)] = value
-# 	return LocalObject((('item', id(value)),))
+def export(obj) -> 'RemoteObject':
+	''' wrap an object in the local process.
+	
+		this is perfectly useless, except for passing its reference to an other process
+	'''
+	if previous := host.wrapped.get(id(obj)):
+		previous.count += 1
+	else:
+		host.wrapped[id(obj)] = host.Wrapped(obj, 1)
+	return RemoteObject(RemoteWrappedObject(id(obj), True), (('item', id(obj)),))
 
 
 class SlaveProcess:
@@ -206,9 +220,9 @@ class SlaveProcess:
 			... 	return sqrt(-1)
 			>>> root.wait()
 			Traceback (most recent call last):
-			File "/tmp/test.py", line 9, in <module>
+			File ".../test.py", line 9, in <module>
 				root.wait()
-			File "/home/jimy/maf/processional/processional/processing.py", line 428, in wait
+			File ".../processional/processional/processing.py", line 428, in wait
 				raise err
 			ValueError: math domain error
 			
@@ -270,7 +284,7 @@ class SlaveProcess:
 		
 			The server process might continue to run threads
 			
-			This method useful if you set the slave `persistent` and need to stop its server loop
+			This method is useful if you set the slave `persistent` and need to stop its server loop
 		'''
 		return self.Task(self, host.CLOSE, None)
 		
@@ -326,7 +340,7 @@ class SlaveProcess:
 			The proxy object tries behaves as the object living in the child process by sending every method call it the process.
 		'''
 		remote = self.Task(self, host.WRAP, func).wait()
-		return RemoteObject(WrappedObject(self, remote, True), ((host.ITEM, remote),))
+		return RemoteObject(RemoteWrappedObject(self, remote, True), ((host.ITEM, remote),))
 		
 	def connect(self, process) -> 'RemoteObject':
 		''' connect the slave to a given server process or address
@@ -448,11 +462,15 @@ class SlaveProcess:
 				raise err
 			return result
 
-		
-class WrappedObject(object):
+class NonSlave:
+	''' mimic the behavior of a slave but execute everything in the current thread '''
+	def invoke(self, func):	func()
+	def schedule(self, func): func()
+
+class RemoteWrappedObject(object):
 	''' own or borrows a reference to a wrapped object on a slave 
 	
-		But this object is just a data holder, the user should use `RemoteObject` instead
+		This object is just a data holder, the user should use `RemoteObject` instead
 	'''
 	__slots__ = 'slave', 'id', 'owned'
 	
@@ -463,14 +481,37 @@ class WrappedObject(object):
 	
 	def __del__(self):
 		if self.owned:
+			self.owned = False
 			try:	self.slave.Task(self.slave, host.DROP, self.id)
 			except OSError: pass
 		
 	def own(self):
 		if not self.owned:
-			Task(self.slave, host.OWN, self.id)
 			self.owned = True
+			self.slave.Task(self.slave, host.OWN, self.id)
 	
+class LocalWrappedObject(object):
+	''' owns or borrows a reference to a wrapped object in the current process 
+	
+		This object is just a data holder, the user should use `RemoteObject` instead
+	'''
+	__slots__ = 'id', 'owned'
+	slave = NonSlave()
+	
+	def __init__(self, id, owned):
+		self.id = id
+		self.owned = owned
+	
+	def __del__(self):
+		if self.owned:
+			self.owned = False
+			host.wrapped[id(obj)].count -= 1
+	
+	def own(self):
+		if not self.owned:
+			self.owned = True
+			host.wrapped[id(obj)].count += 1
+
 class RemoteObject(object):
 	''' proxy object over an object living in a slave process 
 		
@@ -520,7 +561,7 @@ class RemoteObject(object):
 			return host.unwrap(address)
 		slave = SlaveProcess.instances.get(sid)
 		if slave:
-			return self(WrappedObject(slave, address[0][1], False), address)
+			return self(RemoteWrappedObject(slave, address[0][1], False), address)
 		raise ValueError('cannot represent {} from {} in {} out of its owning process and in unconnected process'.format(
 					_format_address(address),
 					sid,
@@ -560,14 +601,17 @@ class RemoteObject(object):
 		return self.slave.invoke((host.call, self._address, args, kwargs))
 		
 	def own(self):
-		''' ensure this process own a reference to the remote object '''
+		''' ensure this process own a reference to the remote object 
+		
+			this method is not thread-safe
+		'''
 		return self._ref.own()
 	
 	def unwrap(self):
 		''' retreive the referenced object in the current process. It must be pickleable '''
 		return self.slave.invoke((host.unwrap, self._address))
 
-			
+
 
 def _format_address(address):
 	it = iter(address)

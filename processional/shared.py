@@ -1,6 +1,5 @@
-import mmap, copyreg, pickle
+import os, stat, mmap, copyreg, pickle
 from weakref import WeakValueDictionary
-from io import BytesIO as StringIO
 
 import dill
 
@@ -37,9 +36,10 @@ class SharedMemory(mmap.mmap):
 	def __new__(self, content=None, filename:str=None):
 		if content is not None:
 			if filename is None:
-				filename = '/dev/shm/shared-'+hex(id(self))
+				filename = '/dev/shm/processional-'+hex(id(self))
 				
 			with open(filename, 'wb') as f:
+				os.fchmod(f.fileno(), stat.S_IRUSR | stat.S_IWUSR)
 				if isinstance(content, int):
 					f.write(bytearray(content))
 				else:
@@ -87,10 +87,10 @@ def sharedmemory(content=None, filename:str=None) -> SharedMemory:
 			Nothing prevents concurrent read/write access to a sharedmemory. The user must take care to synchronize accesses using for instance a `RemoteObject` wrapping a `Lock`
 	'''
 	if content is None:
-		mem = shared_memories.get(filename)
-		if mem:
-			return mem	
-	shared_memories[filename] = mem = SharedMemory(content, filename)
+		if mem := shared_memories.get(filename):
+			return mem
+	mem = SharedMemory(content, filename)
+	shared_memories[mem.file.name] = mem
 	return mem
 
 
@@ -164,16 +164,36 @@ class Diller(dill.Pickler):
 
 
 
-
+def test_sharedmemory():
+	from io import BytesIO as StringIO
+	
+	data = b'12345'*1000
+	mem = sharedmemory(data)
+	
+	try:	pickle.dumps(mem)
+	except TypeError:  pass
+	else:   assert False
+	
+	file = StringIO()
+	pickler = Pickler(file)
+	pickler.dump(mem)
+	load = pickle.loads(file.getvalue())
+	assert memoryview(mem) == memoryview(load)
+	assert memoryview(mem).obj is memoryview(load).obj
+	
+	file = StringIO()
+	pickler = Diller(file)
+	pickler.dump(mem)
+	load = pickle.loads(file.getvalue())
+	assert memoryview(mem) == memoryview(load)
+	assert memoryview(mem).obj is memoryview(load).obj
+	
 
 def benchmark_sharedmemory():
 	import numpy as np
 	from time import perf_counter
 	
 	import multiprocessing.shared_memory
-	import multiprocessing.managers
-	import multiprocessing as mp
-	mp.set_start_method('spawn')
 	
 	import mmap
 	

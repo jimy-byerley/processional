@@ -6,9 +6,9 @@ from collections import deque
 __all__ = ['thread', 'current_thread', 'Thread', 'SlaveThread']
 
 
-def thread(func) -> 'Thread':
+def thread(func, detach=False) -> 'Thread':
 	''' spawn a thread running the given function '''
-	thread = Thread(target=func)
+	thread = Thread(target=func, daemon=not detach)
 	thread.start()
 	return thread
 	
@@ -49,27 +49,28 @@ class Thread(threading.Thread):
 			>>> root = thread(lambda: sqrt(-1))
 			>>> root.wait()
 			Traceback (most recent call last):
-			File "/tmp/test.py", line 5, in <module>
+			File ".../test.py", line 5, in <module>
 				root.wait()
-			File "/home/jimy/maf/processional/processional/threading.py", line 138, in wait
+			File ".../processional/processional/threading.py", line 138, in wait
 				raise self.error
-			File "/home/jimy/maf/processional/processional/threading.py", line 105, in run
+			File ".../processional/processional/threading.py", line 105, in run
 				self.result = self.target()
 							^^^^^^^^^^^^^
-			File "/tmp/test.py", line 4, in <lambda>
+			File ".../test.py", line 4, in <lambda>
 				root = thread(lambda: sqrt(-1))
 									^^^^^^^^
 			ValueError: math domain error
-	
-		Args:
-			target:      the callable the thread will execute
-			daemon:      if True, the thread will automatically exit with the main thread
-			name:        a name for the thread (optional, just for debug purpose)
-			warnignore:  if True, each ignored interruption will issue a warning
-			warnerror:   if True, a fatal exception in the thread will be printedout (event if handled afterward)
 	'''
 	def __init__(self, target:callable, daemon=None, name:str=None, warnignore=False, warnerror=False):
-		''' the constructor creates the thread object, but doesn't start it '''
+		''' the constructor creates the thread object, but doesn't start it 
+		
+			Args:
+				target:      the callable the thread will execute
+				daemon:      if True, the thread will automatically exit with the main thread
+				name:        a name for the thread (optional, just for debug purpose)
+				warnignore:  if True, each ignored interruption will issue a warning
+				warnerror:   if True, a fatal exception in the thread will be printedout (event if handled afterward)
+		'''
 		super().__init__(daemon=daemon, name=name)
 		self.error = RuntimeError('thread terminated')
 		self.target = target
@@ -271,14 +272,14 @@ class SlaveThread:
 			>>> root = thread.schedule(lambda: sqrt(-1))
 			>>> root.wait()
 			Traceback (most recent call last):
-			File "/tmp/test.py", line 6, in <module>
+			File ".../test.py", line 6, in <module>
 				root.wait()
-			File "/home/jimy/maf/processional/processional/threading.py", line 415, in wait
+			File ".../processional/threading.py", line 415, in wait
 				raise err
-			File "/home/jimy/maf/processional/processional/threading.py", line 337, in step
+			File ".../processional/threading.py", line 337, in step
 				result = task()
 						^^^^^^
-			File "/tmp/test.py", line 5, in <lambda>
+			File ".../test.py", line 5, in <lambda>
 				root = thread.schedule(lambda: sqrt(-1))
 											^^^^^^^^
 			ValueError: math domain error

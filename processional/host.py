@@ -149,7 +149,7 @@ class Host:
 					except BrokenPipeError:	pass
 					return False
 				elif op == THREAD:
-					thread(lambda: self._task(client, tid, code, self._run))
+					thread(lambda: self._task(client, tid, code, self._run), not self.attached)
 				elif op == BLOCK:
 					self._task(client, tid, code, self._run)
 				elif op == WRAP:
@@ -200,7 +200,10 @@ class Host:
 	def _wrap(self, client, code):
 		''' run and wrap the given code '''
 		obj = self._run(client, code)
-		wrapped[id(obj)] = Wrapped(obj, 0)
+		if previous := wrapped.get(id(obj)):
+			previous.count += 1
+		else:
+			wrapped[id(obj)] = Wrapped(obj, 0)
 		self._own(client, id(obj))
 		return id(obj)
 		

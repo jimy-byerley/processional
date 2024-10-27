@@ -12,10 +12,11 @@
 	Main functions
 	--------------
 	
-	- `thread` runs simple threads
+	- `thread` runs a thread
 	- `slave` creates a slave process
 	- `server` creates a server process
-	- `localserver` creates a thread serving other processes in the current process
+	- `serve` creates a thread serving other processes in the current process
+	- `export` wrap an object in the current thread for use by a remote process
 	- `sharedmemory` creates a buffer object that can be shared accoss processes, that can be viewed using `numpy` or `torch` array
 	
 	Commandline
@@ -53,9 +54,8 @@ __docformat__ = 'google'
 __all__ = [
 	'thread', 'current_thread',
 	'Thread', 'SlaveThread', 
-	'slave', 'server', 'client', 'localserver', 
-	'SlaveProcess', 'RemoteObject',
-	# 'localwrap', 'LocalObject', 
+	'slave', 'server', 'client', 'serve', 'SlaveProcess', 
+	'export', 'RemoteObject',
 	'sharedmemory', 'SharedMemory', 
 	]
 
