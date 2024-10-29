@@ -24,7 +24,7 @@ def module_eval(module, expand_passed=False, expand_failed=True, dynamic=False, 
 def module_explore_dynamic(module):
 	__import__(module)
 	module = sys.modules[module]
-	for name, value in module.__dict__.items():
+	for name, value in list(module.__dict__.items()):
 		if callable(value) and name.startswith('test_'):
 			yield (module.__name__, value.__name__)
 		elif isinstance(value, types.ModuleType) and value.__name__.startswith(module.__name__):
@@ -56,7 +56,10 @@ def func_eval_local(module, func):
 	sys.stderr = open('/tmp/stderr', 'w')
 	try:	
 		func()
-	except Exception as err:
+	except KeyboardInterrupt:
+		traceback.print_exc()
+		success = False
+	except Exception:
 		traceback.print_exc()
 		success = False
 	else:

@@ -1,4 +1,4 @@
-from .connection import SocketConnection, guess_socket_familly
+from .connection import SocketConnection, SerializationError, guess_socket_familly
 from .threading import thread
 
 import sys, traceback, warnings
@@ -56,7 +56,6 @@ class Host:
 		# open the server socket
 		self.socket = socket.socket(guess_socket_familly(self.address), socket.SOCK_STREAM)
 		self.socket.bind(self.address)
-		self.socket.listen()
 		
 		if module:
 			self.env = module.__dict__
@@ -69,6 +68,7 @@ class Host:
 	def server(self):
 		''' server process listening loop '''
 		# welcome requests of new connections
+		self.socket.listen()
 		self.sockets.append(self.socket)
 		while True:
 			# wait for an incomming request
@@ -89,6 +89,7 @@ class Host:
 	def slave(self):
 		''' slave process listening loop '''
 		# wait for the connection of the master
+		self.socket.listen(1)
 		self._accept()
 		# delete socket entry as no longer needed
 		self._unlink()
@@ -116,6 +117,7 @@ class Host:
 		
 	def _unlink(self):
 		''' delete the socket file if using UNIX socket '''
+		self.socket.listen(0)
 		if self.socket.family == socket.AF_UNIX:
 			try:	os.unlink(self.address)
 			except FileNotFoundError: pass
@@ -137,6 +139,8 @@ class Host:
 					tid, op, code = client.connection.recv()
 				except (EOFError, ConnectionResetError):
 					# other end dropped the pipe
+					for oid, increment in client.wrapped.items():
+						self._drop(client, oid, increment)
 					del self.clients[id(sock)]
 					self.sockets.remove(sock)
 					continue
@@ -207,17 +211,17 @@ class Host:
 		self._own(client, id(obj))
 		return id(obj)
 		
-	def _own(self, client, id):
+	def _own(self, client, id, increment=1):
 		''' increment the owning counter of the given object '''
 		if id in wrapped:
-			client.wrapped[id] += 1
-			wrapped[id].count += 1
+			client.wrapped[id] += increment
+			wrapped[id].count += increment
 	
-	def _drop(self, client, id):
+	def _drop(self, client, id, increment=1):
 		''' decrement the owning counter of the given object '''
 		if id in wrapped:
-			client.wrapped[id] -= 1
-			wrapped[id].count -= 1
+			client.wrapped[id] -= increment
+			wrapped[id].count -= increment
 			if wrapped[id].count <= 0:
 				wrapped.pop(id, None)
 		

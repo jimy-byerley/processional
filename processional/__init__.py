@@ -16,7 +16,7 @@
 	- `slave` creates a slave process
 	- `server` creates a server process
 	- `serve` creates a thread serving other processes in the current process
-	- `export` wrap an object in the current thread for use by a remote process
+	- `export` wrap an object in the current process for use by a remote process
 	- `sharedmemory` creates a buffer object that can be shared accoss processes, that can be viewed using `numpy` or `torch` array
 	
 	Commandline

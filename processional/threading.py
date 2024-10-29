@@ -7,7 +7,12 @@ __all__ = ['thread', 'current_thread', 'Thread', 'SlaveThread']
 
 
 def thread(func, detach=False) -> 'Thread':
-	''' spawn a thread running the given function '''
+	''' spawn a thread running the given function 
+	
+		Args:
+			func:  the function run by the thread, its result or errors are propagated to `Thread.wait()`
+			detach:  if `False`, the thread will be set as daemon and stopped automatically when the process's main thread ends
+	'''
 	thread = Thread(target=func, daemon=not detach)
 	thread.start()
 	return thread

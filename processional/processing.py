@@ -147,7 +147,7 @@ def client(address, timeout:float=None) -> 'SlaveProcess':
 	client = socket.socket(family, socket.SOCK_STREAM)
 	client.settimeout(timeout)
 	client.connect(address)
-	slave = SlaveProcess(SocketConnection(client))
+	slave = SlaveProcess(SocketConnection(client, timeout))
 	slave.address = address
 	return slave
 
@@ -181,7 +181,7 @@ def export(obj) -> 'RemoteObject':
 		previous.count += 1
 	else:
 		host.wrapped[id(obj)] = host.Wrapped(obj, 1)
-	return RemoteObject(RemoteWrappedObject(id(obj), True), (('item', id(obj)),))
+	return RemoteObject(LocalWrappedObject(id(obj), True), (('item', id(obj)),))
 
 
 class SlaveProcess:
@@ -466,6 +466,8 @@ class NonSlave:
 	''' mimic the behavior of a slave but execute everything in the current thread '''
 	def invoke(self, func):	func()
 	def schedule(self, func): func()
+	@property
+	def sid(self):	return host.sid
 
 class RemoteWrappedObject(object):
 	''' own or borrows a reference to a wrapped object on a slave 
@@ -505,12 +507,12 @@ class LocalWrappedObject(object):
 	def __del__(self):
 		if self.owned:
 			self.owned = False
-			host.wrapped[id(obj)].count -= 1
+			host.wrapped[self.id].count -= 1
 	
 	def own(self):
 		if not self.owned:
 			self.owned = True
-			host.wrapped[id(obj)].count += 1
+			host.wrapped[self.id].count += 1
 
 class RemoteObject(object):
 	''' proxy object over an object living in a slave process 
@@ -646,7 +648,7 @@ def test_slaveprocess():
 
 	# one only master
 	try:	client(process.address, timeout=0.1)
-	except TimeoutError:  pass
+	except (TimeoutError, ValueError):  pass
 	else:   assert False
 	
 	# task scheduling
@@ -816,9 +818,21 @@ def test_remoteobject():
 	assert second.invoke(lambda: isinstance(l, RemoteObject))
 	assert second.invoke(lambda: l.unwrap() == [1,2,3,5])
 	
-	# localwrap
-	# TODO
+	# export
+	wrapped = process.invoke(lambda: export(l))
+	assert isinstance(wrapped, RemoteObject)
+	assert wrapped.unwrap() == [1,2,3,5]
+	assert wrapped is not l
+	assert process.invoke(lambda: wrapped is l)
 	
-	# dropping in case of diconnections
-	# TODO
+	# dropping in case of disconnections
+	second = client(process.address)
+	a = process.wrap(lambda: 1)
+	b = process.wrap(lambda: 2)
+	sa = second.wrap(lambda: a)
+	process.close()
+	sa.unwrap()
+	try:	second.wrap(lambda: b)
+	except ReferenceError:  pass
+	else:   assert False
 

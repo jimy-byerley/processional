@@ -19,13 +19,12 @@ class SocketConnection(object):
 	max_concat = 512
 	max_temp = 4096
 	
-	def __init__(self, socket):
+	def __init__(self, socket, timeout=None):
 		self.socket = socket
 		self.tmp = memoryview(bytearray(self.max_temp))
 		self.current = 0
 		self.pending = 0
-		
-		self.socket.settimeout(None)
+		self.socket.settimeout(timeout)
 		
 	def __del__(self):
 		self.close()
@@ -33,7 +32,7 @@ class SocketConnection(object):
 	def close(self):
 		self.socket.close()
 		
-	def recv(self):
+	def recv(self, timeout=None):
 		''' receive an object, blocking operation '''
 		if self.pending - self.current < self.header.size:
 			self._recv_raw(True)
@@ -55,7 +54,7 @@ class SocketConnection(object):
 		try:
 			return pickle.loads(data)
 		except Exception as err:
-			raise SerializationError('while receiving,', err)
+			raise SerializationError('while receiving: {}'.format(err))
 		
 	def poll(self, timeout=0):
 		''' check for data availability.
