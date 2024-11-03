@@ -5,5 +5,5 @@ build:
     tools:
       python: "3.8"
     commands: 
-      - pip install pdoc>=15
+      - pip install pdoc==15 dill==0.3
       - pdoc processional -o _readthedocs/html/
