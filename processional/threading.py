@@ -1,9 +1,9 @@
 import sys, threading, ctypes, traceback
-from threading import Lock, Condition, current_thread
+from threading import Lock, Condition, current_thread, main_thread
 from collections import deque
 
 
-__all__ = ['thread', 'current_thread', 'Thread', 'SlaveThread']
+__all__ = ['thread', 'current_thread', 'main_thread', 'Thread', 'SlaveThread']
 
 
 def thread(func, detach=False) -> 'Thread':
