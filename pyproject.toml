@@ -1,6 +1,6 @@
 [project]
 name = "processional"
-version = "0.1.0"
+version = "0.1.1"
 description = "multiprocess and multithread functional programming library"
 authors = [{name = "jimy-byerley", email = "jimy.byerley@gmail.com"}]
 license = "LGPL-3.0"
