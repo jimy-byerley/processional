@@ -15,6 +15,7 @@ dependencies = [
 [tool.poetry.group.test.dependencies]
 numpy = ">=1.10"
 pnprint = "^1.1"
+tyro = "^0.8"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

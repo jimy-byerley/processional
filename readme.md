@@ -72,7 +72,7 @@ and the result is ...
 499999500000
 ```
 
-But sometimes you need to keep your heavy resource alive for several tasks. You might simply keep a reference to this resource in your main thread and run a second thread later, but some objects (like Gui objects, or non thread-safe object) need to be run or held only in one only thread. So you have to communicate your orders to this thread: this is called invocation or scheduling.
+But sometimes you need to keep your heavy resource alive for several tasks. You might simply keep a reference to this resource in your main thread and run a second thread later, but some objects (like Gui objects, or any non thread-safe objects) need to be run or held by one only thread. So you have to communicate your orders to this thread: this is called thread invocation.
 a `SlaveThread` is the way to work around this:
 
 ```python
