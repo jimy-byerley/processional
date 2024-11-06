@@ -133,7 +133,12 @@ def main(module:str='tests', /, dynamic:bool=False, isolate:bool=False, failed:b
 	if path[-1].startswith('test_'):
 		func = path.pop()
 		module = '.'.join(path)
-		function_eval(module, func)
+		function_eval(
+			module, func,
+			isolate=isolate,
+			expand_failed=failed,
+			expand_passed=passed,
+			)
 	else:
 		module_eval(
 			module, 

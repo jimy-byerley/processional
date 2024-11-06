@@ -62,8 +62,8 @@ class Host:
 	
 	def __del__(self):
 		if self.socket:
-			self.socket.close()
 			self._unlink()
+			self.socket.close()
 	
 	def server(self):
 		''' server process listening loop '''
@@ -82,6 +82,7 @@ class Host:
 				break
 			
 			if not self.clients and not self.persistent:
+				self._unlink()
 				if self.attached:
 					os.kill(os.getpid(), signal.SIGTERM)
 				break
@@ -119,7 +120,7 @@ class Host:
 		''' delete the socket file if using UNIX socket '''
 		self.socket.listen(0)
 		if self.socket.family == socket.AF_UNIX:
-			try:	os.unlink(self.address)
+			try:	os.remove(self.address)
 			except FileNotFoundError: pass
 					
 	def _step(self):
