@@ -364,10 +364,16 @@ class SlaveProcess:
 		'''
 		if timeout is None or self.connection.poll(timeout):
 			id, err, result, report = self.connection.recv()
+			# register for attending task
 			if id in self.register:
+				# notes can be added since python 3.11
+				if err:
+					try:    err.add_note('traceback on slave side:\n'+report)
+					except NameError: pass
 				self.register[id] = (err, result, report)
 				with self.recvsig:
 					self.recvsig.notify_all()
+			# or report immediately if not attended
 			elif err:
 				print('Exception in', self, file=sys.stderr)
 				print(report, file=sys.stderr)
@@ -463,9 +469,6 @@ class SlaveProcess:
 			err, result, report = self.slave.register[self.id]
 			self.slave.register[self.id] = None
 			if err:
-				# notes can be added since python 3.11
-				try:    err.add_note('traceback on slave side:\n'+report)
-				except NameError: pass
 				raise err
 			return result
 
@@ -553,7 +556,7 @@ class RemoteObject(object):
 			
 	def __repr__(self):
 		''' dummy implementation '''
-		return '<{} {} in sid={} at {}>'.format(
+		return '<{} {} in sid {} at {}>'.format(
 			type(self).__name__, 
 			'owned' if self._ref.owned else 'borrowed', 
 			self._ref.slave.sid, 
@@ -626,10 +629,10 @@ def _format_address(address):
 	it = iter(address)
 	address = hex(next(it)[1])
 	for kind, sub in it:
-		if kind == 'attr':	
+		if kind == host.ATTR:
 			address += '.'
 			address += str(sub)
-		elif kind == 'item':
+		elif kind == host.ITEM:
 			address += '['
 			address += repr(sub)
 			address += ']'
