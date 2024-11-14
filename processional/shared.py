@@ -1,4 +1,4 @@
-import os, stat, mmap, copyreg, pickle
+import os, stat, mmap, copyreg, pickle, ctypes
 from weakref import WeakValueDictionary
 
 import dill
@@ -98,45 +98,49 @@ def sharedmemory(content=None, filename:str=None) -> SharedMemory:
 def dump_sharedmemory(obj):
 	return sharedmemory, (None, obj.file.name)
 	
-def try_dump_ndarray(obj):
-	# get the object actually owning the buffer
-	base = parent = obj
-	while True:
-		if isinstance(base, (np.ndarray, np.void)):
-			base, parent = base.base, base
-		elif isinstance(base, memoryview):
-			base, parent = base.obj, base
+try:
+	import numpy.core as np
+except ImportError:	pass
+else:
+	def try_dump_ndarray(obj):
+		# get the object actually owning the buffer
+		base = parent = obj
+		while True:
+			if isinstance(base, (np.ndarray, np.void)):
+				base, parent = base.base, base
+			elif isinstance(base, memoryview):
+				base, parent = base.obj, base
+			else:
+				break
+		# case where it is possible to serialize out-of-band
+		if isinstance(base, SharedMemory):
+			#print('dump sharedmemory', obj.size, object.__repr__(obj), object.__repr__(base))
+			offset = obj.ctypes.data - ctypes.addressof(ctypes.c_byte.from_buffer(base))
+			return (obj.dtype, base.file.name, offset, obj.shape, obj.strides)
+		elif isinstance(base, mmap.mmap) and isinstance(parent, np.ndarray) and hasattr(parent, 'filename'):
+			offset = obj.ctypes.data - ctypes.addressof(ctypes.c_byte.from_buffer(base))
+			return (obj.dtype, parent.filename, offset, obj.shape, obj.strides)
+		# else it must be serialized in-band
+
+	def dump_shared_ndarray(obj):
+		# WARNING: if this dump is used on a subclass of ndarray viewing a shared memory, the dump will share memory but will produce a base ndarray instead of the exact subclass expected
+		if args := try_dump_ndarray(obj):
+			return load_shared_ndarray, args
 		else:
-			break
-	# case where it is possible to serialize out-of-band
-	if isinstance(base, SharedMemory):
-		#print('dump sharedmemory', obj.size, object.__repr__(obj), object.__repr__(base))
-		offset = obj.ctypes.data - ctypes.addressof(ctypes.c_byte.from_buffer(base))
-		return (obj.dtype, base.file.name, offset, obj.shape, obj.strides)
-	elif isinstance(base, mmap.mmap) and isinstance(parent, np.ndarray) and hasattr(parent, 'filename'):
-		offset = obj.ctypes.data - ctypes.addressof(ctypes.c_byte.from_buffer(base))
-		return (obj.dtype, parent.filename, offset, obj.shape, obj.strides)
-	# else it must be serialized in-band
+			return obj.__reduce__()
 
-def dump_shared_ndarray(obj):
-	# WARNING: if this dump is used on a subclass of ndarray viewing a shared memory, the dump will share memory but will produce a base ndarray instead of the exact subclass expected
-	if args := try_dump_ndarray(obj):
-		return load_shared_ndarray, args
-	else:
-		return obj.__reduce__()
-		
-def dump_shared_void(obj):
-	if args := try_dump_ndarray(np.asanyarray(obj).reshape(1)):
-		return load_shared_void, args
-	else:
-		return obj.__reduce__()
+	def dump_shared_void(obj):
+		if args := try_dump_ndarray(np.asanyarray(obj).reshape(1)):
+			return load_shared_void, args
+		else:
+			return obj.__reduce__()
 
-def load_shared_ndarray(dtype, filename, offset, shape, strides):
-	shared = sharedmemory(filename=filename)
-	return np.ndarray(shape, dtype, shared, offset, strides)
-	
-def load_shared_void(*args):
-	return load_shared_ndarray(*args)[0]
+	def load_shared_ndarray(dtype, filename, offset, shape, strides):
+		shared = sharedmemory(filename=filename)
+		return np.ndarray(shape, dtype, shared, offset, strides)
+
+	def load_shared_void(*args):
+		return load_shared_ndarray(*args)[0]
 
 
 class Pickler(pickle.Pickler):
