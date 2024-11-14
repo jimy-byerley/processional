@@ -48,6 +48,8 @@ def slave(address=None, main=None, detach=False) -> 'SlaveProcess':
 	'''
 	args = [sys.executable, '-m', 'processional', '-s']
 	if address:    args.extend(['-a', address])
+	if not main:
+		main = getattr(sys.modules['__main__'], '__file__', None)
 	if main:
 		if not isinstance(main, str):	 main = main.__file__
 		if main:   args.extend(['-m', main])
@@ -95,6 +97,8 @@ def server(address=None, main=None, persistent=False, detach=False, connect=True
 	'''
 	args = [sys.executable, '-m', 'processional']
 	if address:    args.extend(['-a', address])
+	if not main:
+		main = getattr(sys.modules['__main__'], '__file__', None)
 	if main:
 		if not isinstance(main, str):	 main = main.__file__
 		if main:   args.extend(['-m', main])
@@ -459,6 +463,9 @@ class SlaveProcess:
 			err, result, report = self.slave.register[self.id]
 			self.slave.register[self.id] = None
 			if err:
+				# notes can be added since python 3.11
+				try:    err.add_note('traceback on slave side:\n'+report)
+				except NameError: pass
 				raise err
 			return result
 
