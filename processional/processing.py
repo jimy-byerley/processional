@@ -18,7 +18,10 @@ __all__ = ['slave', 'server', 'client', 'serve', 'export',
 
 
 # accept all child process exits
-signal.signal(signal.SIGCHLD, lambda sig, stack: os.wait())
+def handler(sig, stack):
+	try:	os.wait()
+	except ChildProcessError: pass
+signal.signal(signal.SIGCHLD, handler)
 
 
 def slave(address=None, main=None, detach=False) -> 'SlaveProcess':
