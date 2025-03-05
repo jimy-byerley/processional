@@ -246,7 +246,7 @@ def unwrap(address):
 	try:
 		env = wrapped[id].obj
 	except KeyError:
-		raise ReferenceError("no wrapped object at {:x} in {}, was it dropped by its owners ?".format(id, sid))
+		raise ReferenceError("no wrapped object at {:x} in {}, was it dropped by its owners ?".format(id, sid)) from None
 	for kind, sub in it:
 		if kind == ATTR:	env = getattr(env, sub)
 		elif kind == ITEM:	env = env[sub]
