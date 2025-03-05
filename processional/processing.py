@@ -504,6 +504,7 @@ class RemoteWrappedObject(object):
 		if not self.owned:
 			self.owned = True
 			self.slave.Task(self.slave, host.OWN, self.id)
+		return self
 	
 class LocalWrappedObject(object):
 	''' owns or borrows a reference to a wrapped object in the current process 
@@ -526,6 +527,7 @@ class LocalWrappedObject(object):
 		if not self.owned:
 			self.owned = True
 			host.wrapped[self.id].count += 1
+		return self
 
 class RemoteObject(object):
 	''' proxy object over an object living in a slave process 
@@ -620,7 +622,8 @@ class RemoteObject(object):
 		
 			this method is not thread-safe
 		'''
-		return self._ref.own()
+		self._ref.own()
+		return self
 	
 	def unwrap(self):
 		''' retreive the referenced object in the current process. It must be pickleable '''
