@@ -89,7 +89,7 @@ def func_eval_local(module, func):
 	stderr = sys.stderr
 	sys.stdout = open('/tmp/stdout', 'w')
 	sys.stderr = open('/tmp/stderr', 'w')
-	try:	
+	try:
 		func()
 	except KeyboardInterrupt:
 		traceback.print_exc()
@@ -129,21 +129,25 @@ def main(module:str='tests', /, dynamic:bool=False, isolate:bool=False, failed:b
 		failed: print stdin and stdout for failed tests
 		passed: print stdin and stdout for passed tests
 	'''
-	path = module.split('.')
-	if path[-1].startswith('test_'):
-		func = path.pop()
-		module = '.'.join(path)
-		function_eval(
-			module, func,
-			isolate=isolate,
-			expand_failed=failed,
-			expand_passed=passed,
-			)
-	else:
-		module_eval(
-			module, 
-			dynamic=dynamic,
-			isolate=isolate,
-			expand_failed=failed,
-			expand_passed=passed,
-			)
+	try:
+		path = module.split('.')
+		if path[-1].startswith('test_'):
+			func = path.pop()
+			module = '.'.join(path)
+			function_eval(
+				module, func,
+				isolate=isolate,
+				expand_failed=failed,
+				expand_passed=passed,
+				)
+		else:
+			module_eval(
+				module, 
+				dynamic=dynamic,
+				isolate=isolate,
+				expand_failed=failed,
+				expand_passed=passed,
+				)
+	except KeyboardInterrupt:
+		print('{}canceled{}'.format(ERROR, NORMAL))
+		pass
