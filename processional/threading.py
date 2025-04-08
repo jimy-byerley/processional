@@ -1,4 +1,4 @@
-import sys, threading, ctypes, traceback
+import sys, threading, ctypes, traceback, warnings
 from threading import Lock, Condition, current_thread, main_thread
 from collections import deque
 
@@ -6,14 +6,14 @@ from collections import deque
 __all__ = ['thread', 'current_thread', 'main_thread', 'Thread', 'SlaveThread']
 
 
-def thread(func, detach=False) -> 'Thread':
+def thread(func, detach=False, name:str=None) -> 'Thread':
 	''' spawn a thread running the given function 
 	
 		Args:
 			func:  the function run by the thread, its result or errors are propagated to `Thread.wait()`
 			detach:  if `False`, the thread will be set as daemon and stopped automatically when the process's main thread ends
 	'''
-	thread = Thread(target=func, daemon=not detach)
+	thread = Thread(target=func, daemon=not detach, name=name)
 	thread.start()
 	return thread
 	
@@ -76,6 +76,8 @@ class Thread(threading.Thread):
 				warnignore:  if True, each ignored interruption will issue a warning
 				warnerror:   if True, a fatal exception in the thread will be printedout (event if handled afterward)
 		'''
+		if name is None:
+			name = getattr(target, '__name__', None)
 		super().__init__(daemon=daemon, name=name)
 		self.error = RuntimeError('thread terminated')
 		self.target = target
@@ -108,7 +110,7 @@ class Thread(threading.Thread):
 			self.eit()
 			self.result = self.target()
 		except Exception as err:
-			if self.warnerror:
+			if self.warnerror or self.daemon:
 				warnings.warn('exception occured in {}: {}'.format(self, traceback.format_exception(err)))
 			self.error = err
 		else:

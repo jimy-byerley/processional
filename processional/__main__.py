@@ -4,7 +4,7 @@
 
 from .host import Host
 from .processing import _default_address
-import sys, types, importlib
+import sys, types, importlib, warnings
 import os, signal
 
 raw_address = None
