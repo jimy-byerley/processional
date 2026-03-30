@@ -163,8 +163,13 @@ class Host:
 					continue  # pas de données
 				tid, op, code = client.connection.recv()
 			except (EOFError, ConnectionResetError):
-				self._cleanup_client(sock, client)
-				continue
+				# other end dropped the pipe
+					for oid, increment in client.wrapped.items():
+						self._drop(client, oid, increment)
+					del self.clients[id(sock)]
+					self.selector.unregister(sock)
+					continue
+				
 
 			# for operations on the server itself, a closure cannot be passed from the client to the server because nothing the client can send can reference the server object, therefore the client passes an operation specifier
 			# op is an enum value telling what to do with the code or with the server
@@ -209,6 +214,20 @@ class Host:
 			report = traceback.format_exc()
 			client.connection.send((tid, err.args[1], None, report))
 	
+	def _cleanup_client(self, sock, client, sel):
+		for oid, increment in client.wrapped.items():
+			self._drop(client, oid, increment)
+
+		try:
+			sel.unregister(sock)
+		except Exception:
+			pass
+
+		sock.close()
+
+		self.sockets.remove(sock)
+		del self.clients[id(sock)]
+
 	def _run(self, client, code):
 		''' run the given code '''
 		if isinstance(code, str):
