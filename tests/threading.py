@@ -20,7 +20,7 @@ def test_thread():
 	
 	# check exception raising
 	def subfunc():
-		print(hello)
+		print(hello) # should raise that hello is not defined
 	def func():
 		subfunc()
 	task = thread(func)

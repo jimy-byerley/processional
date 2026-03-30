@@ -118,7 +118,6 @@ ERROR = '\033[91m'
 SUCCESS = '\033[92m'
 DETAIL = '\033[90m'
 
-@tyro.cli
 def main(module:str='tests', /, dynamic:bool=False, isolate:bool=False, failed:bool=False, passed:bool=False):
 	''' run unit tests present in the given python module
 	
@@ -151,3 +150,7 @@ def main(module:str='tests', /, dynamic:bool=False, isolate:bool=False, failed:b
 	except KeyboardInterrupt:
 		print('{}canceled{}'.format(ERROR, NORMAL))
 		pass
+
+
+if __name__ == '__main__':
+	tyro.cli(main)
