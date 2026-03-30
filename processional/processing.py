@@ -49,20 +49,30 @@ def slave(address=None, main=None, detach=False) -> 'SlaveProcess':
 				
 				it is equivalent to calling `SlaveProcess.detach()` later
 	'''
+	print("0")
 	args = [sys.executable, '-m', 'processional', '-s']
+	print("1")
 	if address:    args.extend(['-a', address])
+	print("2")
 	if not main:
 		main = getattr(sys.modules['__main__'], '__file__', None)
+	print("3")
 	if main:
 		if not isinstance(main, str):	 main = main.__file__
 		if main:   args.extend(['-m', main])
+	print("4")
 	if detach:     args.append('-d')
 	
+	print("5")
 	pid = os.spawnv(os.P_NOWAIT, sys.executable, args)
+	print("6")
 	
-	slave = client(address or _default_address(pid))
-	slave.pid = pid
-	return slave
+	# slave = client(address or _default_address(pid))
+	# print("7")
+
+	# slave.pid = pid
+	# print("8")
+	# return slave
 	
 def server(address=None, main=None, persistent=False, detach=False, connect=True) -> 'SlaveProcess':
 	''' create a server process that listen for any new connection and answer to any client command.

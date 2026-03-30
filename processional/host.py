@@ -1,3 +1,4 @@
+import selectors
 from .connection import SocketConnection, SerializationError, guess_socket_familly
 from .threading import thread
 
@@ -7,7 +8,6 @@ from dataclasses import dataclass
 from collections import Counter
 
 import dill
-
 
 
 # id of this process as a slave, it will not change for the lifetime of the process
@@ -44,7 +44,7 @@ class Host:
 		# stops the current process after the last client disconnected
 		self.attached = attached
 		# all sockets to listen
-		self.sockets = []
+		self.selector = selectors.DefaultSelector()
 		# clients sockets and their wrapped objects
 		self.clients = {}
 		# server named variables
@@ -66,17 +66,24 @@ class Host:
 			self.socket.close()
 	
 	def server(self):
-		''' server process listening loop '''
+		''' server process listening loop '''		
 		# welcome requests of new connections
 		self.socket.listen()
-		self.sockets.append(self.socket)
+		self.socket.setblocking(False)
+
+		self.selector.register(self.socket, selectors.EVENT_READ)
+
 		while True:
 			# wait for an incomming request
-			ready, _, _ = select.select(self.sockets, [], [])
+			events = self.selector.select()
+
 			# welcome new connections
-			for sock in ready:
+			for key, _ in events:
+				sock = key.fileobj
+
 				if sock is self.socket:
 					self._accept()
+
 			# check receved commands, ready is not used because new commands can arrive during this loop
 			if not self._step():
 				break
@@ -97,7 +104,8 @@ class Host:
 		
 		while True:
 			# wait for incomming commands
-			ready, _, _ = select.select(self.sockets, [], [])
+			events = self.selector.select()
+			
 			# check receved commands, ready is not used because new commands can arrive during this loop
 			if not self._step():
 				break
@@ -113,7 +121,10 @@ class Host:
 		sock, source = self.socket.accept()
 		connection = SocketConnection(sock)
 		connection.send(sid)
-		self.sockets.append(sock)
+
+		sock.setblocking(False)
+		self.selector.register(sock, selectors.EVENT_READ)
+
 		self.clients[id(sock)] = Client(connection, Counter())
 		
 	def _unlink(self):
@@ -127,51 +138,58 @@ class Host:
 		''' execute all already scheduled tasks
 			This is meant to be called periodically by the server event loop
 		'''
-		while True:
-			busy = False
-			for sock in self.sockets:
-				if sock is self.socket:	continue
-				client = self.clients[id(sock)]
-				
+		events = self.selector.select()
+		if not events:
+			return True
+
+		for key, mask in events:
+			sock = key.fileobj
+
+			if sock is self.socket:
+				self._accept()
+				continue
+
+			client = self.clients.get(id(sock))
+			if not client:
 				try:
-					if not client.connection.poll(0):
-						continue
-					busy = True
-					tid, op, code = client.connection.recv()
-				except (EOFError, ConnectionResetError):
-					# other end dropped the pipe
-					for oid, increment in client.wrapped.items():
-						self._drop(client, oid, increment)
-					del self.clients[id(sock)]
-					self.sockets.remove(sock)
-					continue
-				
-				# for operations on the server itself, a closure cannot be passed from the client to the server because nothing the client can send can reference the server object, therefore the client passes an operation specifier
-				# op is an enum value telling what to do with the code or with the server
-				if op == CLOSE:
-					# other end requested slave exit
-					try:	client.connection.send((tid, None, None))
-					except BrokenPipeError:	pass
-					return False
-				elif op == THREAD:
-					thread(lambda: self._task(client, tid, code, self._run), not self.attached)
-				elif op == BLOCK:
-					self._task(client, tid, code, self._run)
-				elif op == WRAP:
-					self._task(client, tid, code, self._wrap)
-				elif op == DROP:
-					self._drop(client, code)
-				elif op == OWN:	
-					self._own(client, code)
-				elif op == PERSIST:
-					self.persistent = True
-					self.connection.send((tid, None, None, None))
-				elif op == DETACH:
-					self.attached = False
-					self.connection.send((tid, None, None, None))
-			
-			if not busy:
-				break
+					self.selector.unregister(sock)
+				except Exception:
+					pass
+				sock.close()
+				continue
+
+			try:
+				if not client.connection.poll(0):
+					continue  # pas de données
+				tid, op, code = client.connection.recv()
+			except (EOFError, ConnectionResetError):
+				self._cleanup_client(sock, client)
+				continue
+
+			# for operations on the server itself, a closure cannot be passed from the client to the server because nothing the client can send can reference the server object, therefore the client passes an operation specifier
+			# op is an enum value telling what to do with the code or with the server
+			if op == CLOSE:
+				# other end requested slave exit
+				try:	client.connection.send((tid, None, None))
+				except BrokenPipeError:	pass
+				return False
+			elif op == THREAD:
+				thread(lambda: self._task(client, tid, code, self._run), not self.attached)
+			elif op == BLOCK:
+				self._task(client, tid, code, self._run)
+			elif op == WRAP:
+				self._task(client, tid, code, self._wrap)
+			elif op == DROP:
+				self._drop(client, code)
+			elif op == OWN:	
+				self._own(client, code)
+			elif op == PERSIST:
+				self.persistent = True
+				self.connection.send((tid, None, None, None))
+			elif op == DETACH:
+				self.attached = False
+				self.connection.send((tid, None, None, None))
+
 		return True
 	
 	def _task(self, client, tid, code, run):
