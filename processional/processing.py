@@ -12,9 +12,6 @@ from weakref import WeakValueDictionary
 from threading import Lock, Condition
 from io import BytesIO as StringIO
 
-print("CLOSE", host.CLOSE)
-print("DROP", host.DROP)
-
 __all__ = ['slave', 'server', 'client', 'serve', 'export',
 			'SlaveProcess', 'RemoteObject']
 
@@ -401,11 +398,6 @@ class SlaveProcess:
 		__slots__ = 'slave', 'id', 'start'
 		
 		def __init__(self, slave, op, code):
-			# print(slave, op, code)
-
-			# print("traceback")
-			# traceback.print_stack()
-			# print()
 			self.start = time()
 			self.slave = slave
 			with self.slave.sendlock:
@@ -415,7 +407,6 @@ class SlaveProcess:
 			if self.id not in self.slave.register:
 				self.slave.register[self.id] = None
 				
-				print("op", op)
 				if op in (host.BLOCK, host.WRAP, host.THREAD):
 					if callable(code):
 						file = StringIO()
