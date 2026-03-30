@@ -138,63 +138,52 @@ class Host:
 		''' execute all already scheduled tasks
 			This is meant to be called periodically by the server event loop
 		'''
-		events = self.selector.select()
-		if not events:
-			return True
+		while True:
+			busy = False
+			for sock in [key.fileobj for key in self.selector.get_map().values()]:
 
-		for key, mask in events:
-			sock = key.fileobj
-
-			if sock is self.socket:
-				self._accept()
-				continue
-
-			client = self.clients.get(id(sock))
-			if not client:
+				if sock is self.socket:	continue
+				client = self.clients[id(sock)]
+				
 				try:
-					self.selector.unregister(sock)
-				except Exception:
-					pass
-				sock.close()
-				continue
-
-			try:
-				if not client.connection.poll(0):
-					continue  # pas de données
-				tid, op, code = client.connection.recv()
-			except (EOFError, ConnectionResetError):
-				# other end dropped the pipe
+					if not client.connection.poll(0):
+						continue
+					busy = True
+					tid, op, code = client.connection.recv()
+				except (EOFError, ConnectionResetError):
+					# other end dropped the pipe
 					for oid, increment in client.wrapped.items():
 						self._drop(client, oid, increment)
 					del self.clients[id(sock)]
 					self.selector.unregister(sock)
 					continue
 				
-
-			# for operations on the server itself, a closure cannot be passed from the client to the server because nothing the client can send can reference the server object, therefore the client passes an operation specifier
-			# op is an enum value telling what to do with the code or with the server
-			if op == CLOSE:
-				# other end requested slave exit
-				try:	client.connection.send((tid, None, None))
-				except BrokenPipeError:	pass
-				return False
-			elif op == THREAD:
-				thread(lambda: self._task(client, tid, code, self._run), not self.attached)
-			elif op == BLOCK:
-				self._task(client, tid, code, self._run)
-			elif op == WRAP:
-				self._task(client, tid, code, self._wrap)
-			elif op == DROP:
-				self._drop(client, code)
-			elif op == OWN:	
-				self._own(client, code)
-			elif op == PERSIST:
-				self.persistent = True
-				self.connection.send((tid, None, None, None))
-			elif op == DETACH:
-				self.attached = False
-				self.connection.send((tid, None, None, None))
-
+				# for operations on the server itself, a closure cannot be passed from the client to the server because nothing the client can send can reference the server object, therefore the client passes an operation specifier
+				# op is an enum value telling what to do with the code or with the server
+				if op == CLOSE:
+					# other end requested slave exit
+					try:	client.connection.send((tid, None, None))
+					except BrokenPipeError:	pass
+					return False
+				elif op == THREAD:
+					thread(lambda: self._task(client, tid, code, self._run), not self.attached)
+				elif op == BLOCK:
+					self._task(client, tid, code, self._run)
+				elif op == WRAP:
+					self._task(client, tid, code, self._wrap)
+				elif op == DROP:
+					self._drop(client, code)
+				elif op == OWN:	
+					self._own(client, code)
+				elif op == PERSIST:
+					self.persistent = True
+					self.connection.send((tid, None, None, None))
+				elif op == DETACH:
+					self.attached = False
+					self.connection.send((tid, None, None, None))
+			
+			if not busy:
+				break
 		return True
 	
 	def _task(self, client, tid, code, run):
