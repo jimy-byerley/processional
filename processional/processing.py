@@ -497,7 +497,7 @@ class RemoteWrappedObject(object):
 	def __del__(self):
 		if self.owned:
 			self.owned = False
-			try:	self.slave.Task(self.slave, 3, self.id)
+			try:	self.slave.Task(self.slave, host.DROP, self.id)
 			except OSError: pass
 		
 	def own(self):

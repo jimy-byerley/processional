@@ -99,7 +99,7 @@ def test_slaveprocess_closing():
 	sleep(1e-1)
 	assert pid_exists(pid)
 	sleep(1.1)
-	assert not pid_exists(pid), mid
+	assert not pid_exists(pid), f"PID {pid} still alive after expected shutdown"
 
 def test_serverprocess():
 	# the implementation of servers and slaves are mostly the same code, so we will test only server-specific features here
