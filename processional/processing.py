@@ -12,7 +12,6 @@ from weakref import WeakValueDictionary
 from threading import Lock, Condition
 from io import BytesIO as StringIO
 
-
 __all__ = ['slave', 'server', 'client', 'serve', 'export',
 			'SlaveProcess', 'RemoteObject']
 
@@ -61,6 +60,7 @@ def slave(address=None, main=None, detach=False) -> 'SlaveProcess':
 	pid = os.spawnv(os.P_NOWAIT, sys.executable, args)
 	
 	slave = client(address or _default_address(pid))
+
 	slave.pid = pid
 	return slave
 	
